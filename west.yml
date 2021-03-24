@@ -1,0 +1,7 @@
+manifest:
+  projects:
+    - name: nrfx
+      url: https://github.com/NordicSemiconductor/nrfx
+    - name: sdk-nrfxlib
+      url: https://github.com/nrfconnect/sdk-nrfxlib
+
