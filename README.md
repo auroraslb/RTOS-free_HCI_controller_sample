@@ -1,0 +1,1 @@
+The goal of this sample is to provide a sample application demonstrating how to integrate the SoftDevice Controller and MPSL into an RTOS-free environment.
