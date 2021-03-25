@@ -31,7 +31,15 @@ target_include_directories(cmake_testapp PRIVATE "cmsis/CMSIS/Core/Include"
                                                  "nrfx/drivers/include"
                                                  "nrfx/drivers/src"
                                                  "nrfx_porting"
+                                                 "sdk-nrfxlib/softdevice_controller/include"
+                                                 "sdk-nrfxlib/mpsl/include"
 )
 
 #link target using desired linker file
 target_link_options(cmake_testapp PRIVATE -B${MDK_INCLUDE_DIR} -T ${MDK_INCLUDE_DIR}/nrf52840_xxaa.ld)
+
+#link with libraries
+target_link_libraries(cmake_testapp
+                      ${CMAKE_CURRENT_SOURCE_DIR}/sdk-nrfxlib/softdevice_controller/lib/cortex-m4/soft-float/libsoftdevice_controller_multirole.a
+                      ${CMAKE_CURRENT_SOURCE_DIR}/sdk-nrfxlib/mpsl/lib/cortex-m4/soft-float/libmpsl.a
+                      )
