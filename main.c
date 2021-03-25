@@ -8,6 +8,21 @@
 
 #include "sdc.h"
 #include "sdc_hci.h"
+
+/* The UART header is 1 byte */
+#define H4_UART_HEADER_SIZE 1
+#define M_H4_RX_BUFFER_SIZE (H4_UART_HEADER_SIZE + HCI_MSG_BUFFER_MAX_SIZE)
+
+typedef enum
+{
+  STATE_RECV_H4_HEADER = 0,
+  STATE_RECV_ACL_DATA_HEADER = 1,
+  STATE_RECV_CMD_HEADER = 2,
+  STATE_RECV_PACKET_CONTENT,
+} recv_state_t;
+
+static recv_state_t m_recv_state;
+
 /* The H4 packet types. */
 typedef enum
 {
@@ -16,6 +31,9 @@ typedef enum
     H4_UART_HCI_SYNCHRONOUS_DATA_PACKET = 0x03,
     H4_UART_HCI_EVENT_PACKET = 0x04
 } h4_uart_pkt_type_t;
+
+static uint8_t m_h4_rx_buffer[M_H4_RX_BUFFER_SIZE];
+
 /* Make UART instance and define config */
 static nrfx_uarte_t uarte_instance = {.p_reg = NRF_UARTE0};
 
@@ -74,6 +92,151 @@ __NO_RETURN void m_fault_handler(const char *file, const uint32_t line)
     while (1)
         ;
 }
+
+
+/* Get length */
+static uint16_t * m_p_to_acl_data_length_get(uint8_t const * p_h4_buf)
+{
+  return (uint16_t*)&p_h4_buf[H4_UART_HEADER_SIZE + 2];
+}
+
+static uint8_t * m_p_to_cmd_length_get(uint8_t const * p_h4_buf)
+{
+  return (uint8_t*)&p_h4_buf[H4_UART_HEADER_SIZE + 2];
+}
+
+
+static void m_state_recv_h4_header_enter(void)
+{
+  NRFX_ASSERT(nrfx_uarte_rx(&uarte_instance, &m_h4_rx_buffer[0], 1) == NRFX_SUCCESS);
+}
+
+
+/* Receive data or command from host to controller */
+static void m_start_recv_h4_header_from_host(void)
+{
+    NRFX_ASSERT(nrfx_uarte_rx(&uarte_instance, &m_h4_rx_buffer[0], 1) == NRFX_SUCCESS);
+}
+
+static void m_on_packet_received_from_host(void)
+{
+    switch (m_h4_rx_buffer[0])
+    {
+    case H4_UART_HCI_ACL_DATA_PACKET:
+        NRFX_ASSERT(sdc_hci_data_put(&m_h4_rx_buffer[H4_UART_HEADER_SIZE]) == 0);
+        break;
+    case H4_UART_HCI_COMMAND_PACKET:
+        NRFX_ASSERT(sdc_hci_cmd_put(&m_h4_rx_buffer[H4_UART_HEADER_SIZE]) == 0);
+        break;
+    default:
+        NRFX_ASSERT(false);
+        break;
+    }
+}
+
+static void m_continue_recv_packet_from_host(nrfx_uarte_xfer_evt_t const *p_transfer_evt)
+{
+    recv_state_t next_state = STATE_RECV_H4_HEADER;
+    switch (m_recv_state)
+    {
+    case STATE_RECV_H4_HEADER:
+        NRFX_ASSERT(p_transfer_evt->bytes == 1);
+        switch (m_h4_rx_buffer[0])
+        {
+        case H4_UART_HCI_ACL_DATA_PACKET:
+            next_state = STATE_RECV_ACL_DATA_HEADER;
+            break;
+        case H4_UART_HCI_COMMAND_PACKET:
+            next_state = STATE_RECV_CMD_HEADER;
+            break;
+        default:
+            NRFX_ASSERT(false);
+            break;
+        }
+        break;
+    case STATE_RECV_ACL_DATA_HEADER:
+        if (*m_p_to_acl_data_length_get(m_h4_rx_buffer) > 0)
+        {
+            next_state = STATE_RECV_PACKET_CONTENT;
+        }
+        else
+        {
+            m_on_packet_received_from_host();
+            next_state = STATE_RECV_H4_HEADER;
+        }
+        break;
+    case STATE_RECV_CMD_HEADER:
+        if (*m_p_to_cmd_length_get(m_h4_rx_buffer) > 0)
+        {
+            next_state = STATE_RECV_PACKET_CONTENT;
+        }
+        else
+        {
+            m_on_packet_received_from_host();
+            next_state = STATE_RECV_H4_HEADER;
+        }
+        break;
+    case STATE_RECV_PACKET_CONTENT:
+        m_on_packet_received_from_host();
+        next_state = STATE_RECV_H4_HEADER;
+        break;
+    default:
+        NRFX_ASSERT(false);
+        break;
+    }
+
+    switch (next_state)
+    {
+    case STATE_RECV_H4_HEADER:
+        m_start_recv_h4_header_from_host();
+        break;
+    case STATE_RECV_ACL_DATA_HEADER:
+        NRFX_ASSERT(nrfx_uart_rx(&uart_instance, &m_h4_rx_buffer[H4_UART_HEADER_SIZE], 4) == NRFX_SUCCESS);
+        break;
+    case STATE_RECV_CMD_HEADER:
+        NRFX_ASSERT(nrfx_uart_rx(&uart_instance, &m_h4_rx_buffer[H4_UART_HEADER_SIZE], 3) == NRFX_SUCCESS);
+        break;
+    case STATE_RECV_PACKET_CONTENT:
+        switch (m_h4_rx_buffer[0])
+        {
+        case H4_UART_HCI_ACL_DATA_PACKET:
+            NRFX_ASSERT(nrfx_uart_rx(&uart_instance,
+                                     &m_h4_rx_buffer[H4_UART_HEADER_SIZE + 4],
+                                     *m_p_to_acl_data_length_get(m_h4_rx_buffer)) == NRFX_SUCCESS);
+            break;
+        case H4_UART_HCI_COMMAND_PACKET:
+            NRFX_ASSERT(nrfx_uart_rx(&uart_instance,
+                                     &m_h4_rx_buffer[H4_UART_HEADER_SIZE + 3],
+                                     *m_p_to_cmd_length_get(m_h4_rx_buffer)) == NRFX_SUCCESS);
+            break;
+        default:
+            NRFX_ASSERT(false);
+            break;
+        }
+        break;
+    }
+
+    m_recv_state = next_state;
+}
+
+
+void nrfx_uarte_event_handler(nrfx_uarte_event_t const *p_event,
+                              void *p_context)
+{
+    switch (p_event->type)
+    {
+//    case NRFX_UARTE_EVT_TX_DONE:
+//        m_tx_buffer_available = true;
+//        break;
+    case NRFX_UARTE_EVT_RX_DONE:
+        m_continue_recv_packet_from_host(&p_event->data.rxtx);
+        break;
+    case NRFX_UARTE_EVT_ERROR:
+       // m_fault_handler(__MODULE__, __LINE__);
+        break;
+    }
+}
+
 /* Buffer for writing to UART */
 char tmp_buff[128];
 
@@ -100,8 +263,9 @@ int main()
     nrfx_uarte_tx(&uarte_instance, (const uint8_t *)tmp_buff, strlen((const char *)string));
     */
 
-    sprintf((char*)tmp_buff, "%s", string);
-    nrfx_uarte_tx(&uarte_instance, (const uint8_t*) tmp_buff, strlen((const char*)string));
+    NRFX_ASSERT(nrfx_uarte_init(&uarte_instance, p_uarte_config, nrfx_uarte_event_handler) == NRFX_SUCCESS);
+    //nrfx_uarte_rx_enable(&uarte_instance);
+    m_state_recv_h4_header_enter();
 
     return 0;
 }
