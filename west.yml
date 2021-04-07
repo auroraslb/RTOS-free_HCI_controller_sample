@@ -1,0 +1,12 @@
+manifest:
+  projects:
+    - name: nrfx
+      url: https://github.com/NordicSemiconductor/nrfx
+      path: RTOS-free_HCI_controller_sample/nrfx
+    - name: sdk-nrfxlib
+      url: https://github.com/nrfconnect/sdk-nrfxlib
+      path: RTOS-free_HCI_controller_sample/sdk-nrfxlib
+    - name: cmsis
+      url: https://github.com/zephyrproject-rtos/cmsis
+      path: RTOS-free_HCI_controller_sample/cmsis
+
