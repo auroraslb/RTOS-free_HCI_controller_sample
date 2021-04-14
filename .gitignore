@@ -1,0 +1,8 @@
+build
+cmsis
+nrfx
+sdk-nrfxlib
+
+.ninja_deps
+.ninja_log
+.vscode
