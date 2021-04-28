@@ -16,6 +16,8 @@ set( SRCS
     nrfx/mdk/gcc_startup_nrf52840.S
     nrfx/mdk/system_nrf52840.c
     nrfx/drivers/src/nrfx_uarte.c
+    nrfx/drivers/src/nrfx_rng.c
+    rand_numbers.c
     main.c
 )
 
@@ -33,6 +35,7 @@ target_include_directories(cmake_testapp PRIVATE "cmsis/CMSIS/Core/Include"
                                                  "nrfx_porting"
                                                  "sdk-nrfxlib/softdevice_controller/include"
                                                  "sdk-nrfxlib/mpsl/include"
+                                                 "openthread/third_party/NordicSemiconductor/softdevice/s140/headers"
 )
 
 #link target using desired linker file
@@ -42,4 +45,4 @@ target_link_options(cmake_testapp PRIVATE -B${MDK_INCLUDE_DIR} -T ${MDK_INCLUDE_
 target_link_libraries(cmake_testapp
                       ${CMAKE_CURRENT_SOURCE_DIR}/sdk-nrfxlib/softdevice_controller/lib/cortex-m4/soft-float/libsoftdevice_controller_multirole.a
                       ${CMAKE_CURRENT_SOURCE_DIR}/sdk-nrfxlib/mpsl/lib/cortex-m4/soft-float/libmpsl.a
-                      )
+)

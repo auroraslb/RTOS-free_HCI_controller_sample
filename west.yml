@@ -9,4 +9,7 @@ manifest:
     - name: cmsis
       url: https://github.com/zephyrproject-rtos/cmsis
       path: RTOS-free_HCI_controller_sample/cmsis
+    - name: openthread
+      url: https://github.com/zephyrproject-rtos/openthread
+      path: RTOS-free_HCI_controller_sample/openthread
 
